@@ -74,6 +74,9 @@ let paused = false;
 let frozen = false;
 let selected = 'gun'; // 'gun' | 'flash' | 'smoke'
 let throwCooldown = 0;
+let stepAcc = 0;
+let stepLastX = 0;
+let stepLastZ = 0;
 let prevFiring = false;
 let plantProgress = 0;
 let plantSite = null;
@@ -126,6 +129,9 @@ function resetLoadoutForRound() {
   plantProgress = 0;
   plantSite = null;
   spectateId = null;
+  stepAcc = 0;
+  stepLastX = player.body.position.x;
+  stepLastZ = player.body.position.z;
   grenades.reset();
   bombMesh.visible = false;
   bombLight.intensity = 0;
@@ -311,6 +317,15 @@ function damageEntity(target, amount, headshot, attacker) {
   if (target === player) {
     hud.damageFlash();
     audio.hurt();
+    if (attacker && attacker.kind === 'bot') {
+      // Direction of the shot in player-local space: 0 ahead, positive to the right.
+      const dx = attacker.pos.x - player.body.position.x;
+      const dz = attacker.pos.z - player.body.position.z;
+      const yaw = player.body.yaw;
+      const lx = dx * Math.cos(yaw) - dz * Math.sin(yaw);
+      const lz = dx * Math.sin(yaw) + dz * Math.cos(yaw);
+      hud.showDamageDirection(Math.atan2(lx, -lz));
+    }
   }
   if (attacker === player) {
     hud.hitMarker(target.health <= 0, shot ? 4000 : 90);
@@ -476,6 +491,16 @@ function step(dt) {
 
   // Continuous input: movement always, firing and planting only while live.
   playerBody.step(dt, input.state.keys);
+  // Footsteps: one soft tap per stride while moving on the ground.
+  if (player.alive && player.body.onGround && playerBody.groundSpeed() > 0.5) {
+    stepAcc += Math.hypot(player.body.position.x - stepLastX, player.body.position.z - stepLastZ);
+    if (stepAcc > 2.4) {
+      stepAcc = 0;
+      audio.footstep();
+    }
+  }
+  stepLastX = player.body.position.x;
+  stepLastZ = player.body.position.z;
   weapons.step(dt, playerBody.groundSpeed() > 0.5, input.state.aiming && selected === 'gun');
   const firing = input.state.firing && !hud.buyOpen;
   const def = weapons.def();
@@ -597,6 +622,13 @@ function syncHud() {
   const timer = state.bomb.planted ? state.bomb.timer : state.phaseTime;
   hud.setTimer(state.phase === 'matchEnd' ? 0 : timer, state.phase);
   hud.setScore(state.score.sable, state.score.warden, state.round);
+  // Objective line: one short instruction for the current state.
+  if (state.phase === 'buy') hud.setObjective('Buy phase — <b>gear up</b>');
+  else if (state.phase === 'live' && state.bomb.planted) hud.setObjective('Charge planted — <b>defend the site</b>');
+  else if (state.phase === 'live' && state.bomb.carrier === 'player') hud.setObjective('Plant the charge — <b>site A or B</b>');
+  else if (state.phase === 'live' && state.bomb.carrier) hud.setObjective('Escort <b>the carrier</b>');
+  else if (state.phase === 'live') hud.setObjective('Eliminate <b>the Warden</b>');
+  else hud.setObjective('');
   hud.setCharge(state.bomb.carrier === 'player' && !state.bomb.planted && player.alive);
   const mates = bots.bots.filter((b) => b.team === 'sable').map((b) => ({ x: b.pos.x, z: b.pos.z, alive: b.alive }));
   hud.drawMinimap(
@@ -708,19 +740,36 @@ function runShot(name) {
     settle(30);
     hud.showBuy(buyItems(), state.money.player);
   } else if (name === 'play') {
+    // The cover frame: a live round mid-fight — rifle in the foreground, two Warden
+    // bots in the open, a kill already on the feed, mid-match score.
     state.phase = 'live';
     state.phaseTime = 87;
-    player.body.position.set(0, 0, 8);
+    state.score.sable = 2;
+    state.score.warden = 1;
+    state.round = 4;
+    player.body.position.set(0, 0, 10);
     player.body.yaw = 0;
     player.body.pitch = 0;
+    player.primary = 'vk47';
+    weapons.switchTo('vk47');
     const bram = bots.byId('bram');
-    bram.pos.set(1.5, 0, -6);
+    bram.pos.set(0.5, 0, 1);
     bram.yaw = Math.PI;
     bram.state = 'hold';
     bram.holdYaw = Math.PI;
     bram.holdUntil = state.simTime + 60;
+    const onyx = bots.byId('onyx');
+    onyx.pos.set(-1.4, 0, 2.5);
+    onyx.yaw = Math.PI * 0.9;
+    onyx.state = 'hold';
+    onyx.holdYaw = Math.PI * 0.8;
+    onyx.holdUntil = state.simTime + 60;
+    // Blinded so both hold still for the frame instead of engaging mid-settle.
+    bots.blind(bram, state.simTime + 60, 1);
+    bots.blind(onyx, state.simTime + 60, 1);
     settle(10);
-    aimPoint.set(1.5, 1.2, -6);
+    hud.killfeedAdd({ killer: 'Rook', killerTeam: 'sable', victim: 'Fenn', victimTeam: 'warden', headshot: false });
+    aimPoint.set(0.5, 1.2, 1);
     aimAt(aimPoint);
     playerShoot();
     settle(1);
@@ -738,6 +787,9 @@ function runShot(name) {
     settle(5);
     hud.showOverlay('end', { copy: 'Sable takes the match 5 – 3. Yard 7 is yours — play again to run it back.' });
   }
+  // The round banner runs on wall-clock time, so a fast load could catch it mid-frame
+  // and contradict the staged state (it says Round 1 while the shot is round 4).
+  hud.hideBanner();
   syncCamera();
   syncHud();
   paintTwiceThenReady();

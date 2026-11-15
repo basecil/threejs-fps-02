@@ -44,6 +44,8 @@ export function createHud(world, callbacks) {
   const scoreSable = $('score-sable');
   const scoreWarden = $('score-warden');
   const scoreMid = $('score-mid');
+  const objectiveEl = $('objective');
+  const dmgdir = $('dmgdir');
   const killfeed = $('killfeed');
   const banner = $('banner');
   const bannerTitle = $('banner-title');
@@ -73,9 +75,11 @@ export function createHud(world, callbacks) {
   let lastMoney = -1;
   let lastTimer = '';
   let lastScore = '';
+  let lastObjective = '';
   let hitTimer = 0;
   let bannerTimer = 0;
   let damageTimer = 0;
+  let dmgdirTimer = 0;
   let buyOpen = false;
 
   play.addEventListener('click', () => callbacks.onPlay());
@@ -183,6 +187,13 @@ export function createHud(world, callbacks) {
       scoreWarden.textContent = `${warden} WARDEN`;
       scoreMid.textContent = `R${round}`;
     },
+    // One line under the scoreboard naming the current objective; empty hides it.
+    setObjective(html) {
+      if (html === lastObjective) return;
+      lastObjective = html;
+      objectiveEl.hidden = html === '';
+      objectiveEl.innerHTML = html;
+    },
     setBomb(timer, total) {
       bombBox.hidden = false;
       bombLabel.textContent = `Charge planted — ${Math.max(0, timer).toFixed(1)}`;
@@ -225,14 +236,28 @@ export function createHud(world, callbacks) {
       clearTimeout(bannerTimer);
       bannerTimer = setTimeout(() => banner.classList.remove('on'), ms);
     },
+    hideBanner() {
+      clearTimeout(bannerTimer);
+      banner.classList.remove('on');
+    },
     hitMarker(killed, holdMs = 90) {
       hitmarker.classList.add('on');
+      hitmarker.classList.toggle('kill', killed);
       hitmarker.style.transform = killed ? 'translate(-50%, -50%) rotate(45deg) scale(1.25)' : '';
       clearTimeout(hitTimer);
       hitTimer = setTimeout(() => {
         hitmarker.classList.remove('on');
+        hitmarker.classList.remove('kill');
         hitmarker.style.transform = '';
       }, holdMs);
+    },
+    // A red arc around the crosshair pointing toward whoever just shot the player.
+    // angleRad is 0 when the attacker is straight ahead, positive to the right.
+    showDamageDirection(angleRad) {
+      dmgdir.style.transform = `translate(-50%, -50%) rotate(${angleRad * (180 / Math.PI)}deg)`;
+      dmgdir.classList.add('on');
+      clearTimeout(dmgdirTimer);
+      dmgdirTimer = setTimeout(() => dmgdir.classList.remove('on'), 900);
     },
     setFlash(opacity) {
       flashEl.style.opacity = String(Math.max(0, Math.min(1, opacity)));

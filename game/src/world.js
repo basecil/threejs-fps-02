@@ -142,6 +142,34 @@ export function createWorld(scene) {
   paintB.position.set(16, 0.02, -16);
   group.add(paintB);
 
+  // Floating site letters, drawn on canvas at load (no external assets): two crossed
+  // planes per site so the letter reads from any approach. Decor only — never shot at.
+  function siteLetter(letter, color, x, z) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx2d = canvas.getContext('2d');
+    ctx2d.font = '700 190px system-ui, sans-serif';
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.lineWidth = 16;
+    ctx2d.strokeStyle = 'rgba(16,21,28,0.9)';
+    ctx2d.strokeText(letter, 128, 136);
+    ctx2d.fillStyle = color;
+    ctx2d.fillText(letter, 128, 136);
+    const texture = new THREE.CanvasTexture(canvas);
+    const material = new THREE.MeshBasicMaterial({ map: texture, transparent: true, side: THREE.DoubleSide, depthWrite: false });
+    const geo = new THREE.PlaneGeometry(3.4, 3.4);
+    for (const rotation of [0, Math.PI / 2]) {
+      const plane = new THREE.Mesh(geo, material);
+      plane.position.set(x, 4.6, z);
+      plane.rotation.y = rotation;
+      group.add(plane);
+    }
+  }
+  siteLetter('A', '#3fb8a6', -16, -16);
+  siteLetter('B', '#e0683a', 16, -16);
+
   // Water tower landmark at (9, -7): four legs, a tank and a cone roof.
   for (const [lx, lz] of [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]]) {
     box(0.35, 6.4, 0.35, 9 + lx, 3.2, -7 + lz, mat.rust);

@@ -33,6 +33,9 @@
   #hitmarker { position: fixed; left: 50%; top: 50%; width: 26px; height: 26px; transform: translate(-50%, -50%) rotate(45deg); opacity: 0; transition: opacity 90ms linear; }
   #hitmarker.on { opacity: 1; }
   #hitmarker i { position: absolute; background: var(--accent); }
+  #hitmarker.kill i { background: var(--danger); }
+  #dmgdir { position: fixed; left: 50%; top: 50%; width: 140px; height: 140px; transform: translate(-50%, -50%); opacity: 0; transition: opacity 300ms linear; pointer-events: none; }
+  #dmgdir.on { opacity: 1; }
   #hitmarker i:nth-child(1) { left: 12px; top: 0; width: 2px; height: 8px; }
   #hitmarker i:nth-child(2) { left: 12px; bottom: 0; width: 2px; height: 8px; }
   #hitmarker i:nth-child(3) { top: 12px; left: 0; height: 2px; width: 8px; }
@@ -60,6 +63,8 @@
   #score-sable { color: var(--sable); }
   #score-warden { color: var(--warden); }
   #score-mid { color: var(--muted); }
+  #objective { position: fixed; left: 50%; top: 108px; transform: translateX(-50%); font-family: var(--font-readout); font-size: 12px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; text-shadow: 0 1px 4px #000; white-space: nowrap; }
+  #objective b { color: var(--accent); font-weight: 600; }
   #minimap-wrap { position: fixed; left: 28px; top: 16px; border: 1px solid var(--hairline); border-radius: var(--radius); overflow: hidden; background: rgba(16,21,28,.78); }
   #minimap { display: block; }
   #killfeed { position: fixed; right: 28px; top: 16px; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; font-size: 13px; font-family: var(--font-readout); }
@@ -70,7 +75,7 @@
   #banner.on { opacity: 1; }
   #banner-title { font-size: 44px; font-weight: 600; letter-spacing: .02em; text-shadow: 0 2px 12px #000; }
   #banner-sub { margin-top: 6px; font-size: 16px; color: var(--muted); text-shadow: 0 1px 6px #000; }
-  #bomb { position: fixed; left: 50%; top: 118px; transform: translateX(-50%); width: 220px; text-align: center; font-family: var(--font-readout); }
+  #bomb { position: fixed; left: 50%; top: 136px; transform: translateX(-50%); width: 220px; text-align: center; font-family: var(--font-readout); }
   #bomb-label { font-size: 13px; letter-spacing: .12em; color: var(--danger); text-transform: uppercase; }
   #bomb-bar { height: 6px; margin-top: 5px; background: var(--hairline); border-radius: 3px; overflow: hidden; }
   #bomb-fill { height: 100%; width: 100%; background: var(--danger); }
@@ -84,7 +89,7 @@
   #flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
   #damage { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 120ms linear; box-shadow: inset 0 0 90px 30px rgba(224,72,62,.55); }
   #buy { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(16,21,28,.6); pointer-events: auto; }
-  #buy[hidden], #bomb[hidden], #plant[hidden], #hint[hidden], #charge[hidden] { display: none; }
+  #buy[hidden], #bomb[hidden], #plant[hidden], #hint[hidden], #charge[hidden], #objective[hidden] { display: none; }
   #buy-panel { width: min(560px, 94vw); padding: 24px 28px; background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius); }
   #buy-panel h2 { margin: 0 0 4px; font-size: 24px; font-weight: 600; letter-spacing: -.01em; }
   #buy-money { margin: 0 0 16px; font-family: var(--font-readout); color: var(--accent); }
@@ -114,12 +119,14 @@
 <div id="hud" aria-hidden="true">
   <div id="crosshair"><i></i><i></i><i></i><i></i></div>
   <div id="hitmarker"><i></i><i></i><i></i><i></i></div>
+  <svg id="dmgdir" viewBox="0 0 140 140" aria-hidden="true"><path d="M 18 40 A 60 60 0 0 1 122 40" fill="none" stroke="#e0483e" stroke-width="7" stroke-linecap="round"/></svg>
   <div id="ammo"><div id="weapon-name">P9</div><div id="ammo-nums"><span id="ammo-mag">12</span><span id="ammo-reserve">/ 48</span></div></div>
   <div id="health"><div id="health-num">100</div><div id="health-bar"><div id="health-fill"></div></div><div id="armor-tag"></div></div>
   <div id="money">$800</div>
   <div id="grenades"><div>Flash <span id="grenade-flash">0</span> [3]</div><div>Smoke <span id="grenade-smoke">0</span> [4]</div></div>
   <div id="timer"><div id="timer-val">0:15</div><div id="round-label">Buy phase</div></div>
   <div id="scoreboard"><span id="score-sable">SABLE 0</span><span id="score-mid">R1</span><span id="score-warden">0 WARDEN</span></div>
+  <div id="objective" hidden></div>
   <div id="minimap-wrap"><canvas id="minimap" width="168" height="168"></canvas></div>
   <div id="killfeed"></div>
   <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>

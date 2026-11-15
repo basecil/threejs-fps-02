@@ -32,8 +32,10 @@ const ROSTER = [
 
 export function createBots(scene, world, ctx) {
   const teamMat = {
-    sable: new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.sable), roughness: 0.7 }),
-    warden: new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.warden), roughness: 0.7 }),
+    // A little self-light so both teams read against the dusk ground; the Warden
+    // glows hotter, because an enemy must be unmissable at a glance.
+    sable: new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.sable), emissive: new THREE.Color(PALETTE.sable), emissiveIntensity: 0.25, roughness: 0.7 }),
+    warden: new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.warden), emissive: new THREE.Color(PALETTE.warden), emissiveIntensity: 0.5, roughness: 0.7 }),
   };
   const headMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.ink), roughness: 0.6 });
   const darkMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.8 });
