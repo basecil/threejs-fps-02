@@ -64,12 +64,21 @@ export function createInput(canvas, onLockChange) {
 
   return {
     state,
+    // Returns a promise that resolves true when the lock engages, false when it
+    // doesn't (no gesture, or Chrome's exit cooldown). Callers that need the
+    // lock can retry on false; callers that don't can ignore the result.
     requestLock() {
       try {
         const result = canvas.requestPointerLock();
-        if (result && typeof result.catch === 'function') result.catch(() => {});
+        if (result && typeof result.catch === 'function') {
+          return result.then(
+            () => true,
+            () => false,
+          );
+        }
+        return Promise.resolve(true);
       } catch {
-        // No user gesture yet: the play button click will lock instead.
+        return Promise.resolve(false);
       }
     },
     exitLock() {

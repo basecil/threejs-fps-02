@@ -45,6 +45,7 @@ export function createHud(world, callbacks) {
   const scoreWarden = $('score-warden');
   const scoreMid = $('score-mid');
   const objectiveEl = $('objective');
+  const spectateEl = $('spectate');
   const dmgdir = $('dmgdir');
   const killfeed = $('killfeed');
   const banner = $('banner');
@@ -76,6 +77,7 @@ export function createHud(world, callbacks) {
   let lastTimer = '';
   let lastScore = '';
   let lastObjective = '';
+  let lastSpectate = '';
   let hitTimer = 0;
   let bannerTimer = 0;
   let damageTimer = 0;
@@ -220,14 +222,23 @@ export function createHud(world, callbacks) {
     setCharge(carrying) {
       charge.hidden = !carrying;
     },
-    killfeedAdd(entry) {
+    killfeedAdd(entry, persist = false) {
       const div = document.createElement('div');
       const killerClass = entry.killerTeam === 'sable' ? 'sable' : 'warden';
       const victimClass = entry.victimTeam === 'sable' ? 'sable' : 'warden';
       div.innerHTML = `<span class="${killerClass}">${entry.killer}</span> ▸ <span class="${victimClass}">${entry.victim}</span>${entry.headshot ? ' ◎' : ''}`;
       killfeed.prepend(div);
       while (killfeed.children.length > 5) killfeed.removeChild(killfeed.lastChild);
-      setTimeout(() => div.remove(), 6000);
+      // A persisted entry never expires: in shot mode the render is frozen but
+      // wall clocks keep running, and a slow capture must not lose the feed.
+      if (!persist) setTimeout(() => div.remove(), 6000);
+    },
+    // The death line under the crosshair: who the player is spectating. Empty hides it.
+    setSpectate(html) {
+      if (html === lastSpectate) return;
+      lastSpectate = html;
+      spectateEl.hidden = html === '';
+      spectateEl.innerHTML = html;
     },
     banner(titleText, subText, ms = 2500) {
       bannerTitle.textContent = titleText;
@@ -245,6 +256,7 @@ export function createHud(world, callbacks) {
       hitmarker.classList.toggle('kill', killed);
       hitmarker.style.transform = killed ? 'translate(-50%, -50%) rotate(45deg) scale(1.25)' : '';
       clearTimeout(hitTimer);
+      if (holdMs == null) return; // shot mode: the marker stays for the frame
       hitTimer = setTimeout(() => {
         hitmarker.classList.remove('on');
         hitmarker.classList.remove('kill');

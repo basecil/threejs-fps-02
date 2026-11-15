@@ -90,6 +90,16 @@ const hud = createHud(world, {
     audio.unlock();
     if (shot) return;
     if (state.phase === 'matchEnd') restartMatch();
+    if (state.round === 1 && state.phase === 'buy') {
+      // Round 1 opens on the buy menu, not on an empty spawn: the first thing
+      // a new player sees is something to do, not 15s of dead air. No lock
+      // yet — the menu is a mouse UI, and closing it locks the pointer.
+      started = true;
+      paused = false;
+      hud.hideOverlay();
+      openBuy();
+      return;
+    }
     input.requestLock();
   },
   onBuy(id) {
@@ -122,6 +132,10 @@ function resetLoadoutForRound() {
   player.grenades.smoke = 0;
   player.flashUntil = 0;
   player.flashPeak = 0;
+  // Kevlar is per-round armour: a purchase from last round does not carry over.
+  player.kevlar = false;
+  hud.setArmor(false);
+  hud.setSpectate('');
   playerBody.reset(SPAWNS.sable[0]);
   weapons.refillAll();
   weapons.switchTo(player.primary ?? 'p9');
@@ -139,7 +153,9 @@ function resetLoadoutForRound() {
   hud.hidePlant();
   hud.setCharge(true);
   // Bots spend their winnings: a rifle when they can afford one, kevlar when flush.
+  // Their kevlar resets first, like the player's — then they re-buy if flush.
   for (const bot of bots.bots) {
+    bot.kevlar = false;
     const money = state.money[bot.id] ?? 0;
     if (money >= WEAPONS.vk47.price && bot.weapon !== 'vk47') {
       state.money[bot.id] -= WEAPONS.vk47.price;
@@ -328,16 +344,27 @@ function damageEntity(target, amount, headshot, attacker) {
     }
   }
   if (attacker === player) {
-    hud.hitMarker(target.health <= 0, shot ? 4000 : 90);
+    // In shot mode the hitmarker never expires: the render is frozen but wall
+    // clocks keep running, and a slow capture must not lose it.
+    hud.hitMarker(target.health <= 0, shot ? null : 90);
     audio.hit(target.health <= 0);
   }
   if (target.health > 0) return;
   target.alive = false;
   target.health = 0;
+  // Kevlar is per-life armour: it does not survive death.
+  target.kevlar = false;
   if (target.kind === 'bot') {
     target.fall = 0;
     target.target = null;
     target.channel = null;
+    // If the player was spectating this bot, follow the next living teammate
+    // instead of snapping back to the corpse.
+    if (target.id === spectateId && !player.alive) {
+      const next = bots.bots.find((b) => b.alive && b.team === 'sable');
+      spectateId = next ? next.id : null;
+      hud.setSpectate(next ? `Eliminated — spectating <b>${next.name}</b>` : 'Eliminated — <b>your team is gone</b>');
+    }
   }
   state.kills[attacker.id] = (state.kills[attacker.id] ?? 0) + 1;
   state.deaths[target.id] = (state.deaths[target.id] ?? 0) + 1;
@@ -353,6 +380,9 @@ function damageEntity(target, amount, headshot, attacker) {
   }
   if (target === player) {
     spectateId = (bots.bots.find((b) => b.alive && b.team === 'sable') ?? {}).id ?? null;
+    const spectated = spectateId ? bots.byId(spectateId) : null;
+    hud.setSpectate(spectated ? `Eliminated — spectating <b>${spectated.name}</b>` : 'Eliminated — <b>your team is gone</b>');
+    hud.setArmor(false);
     hud.setCharge(false);
     if (hud.buyOpen) closeBuy(false);
   }
@@ -426,7 +456,18 @@ function openBuy() {
 
 function closeBuy(relock) {
   hud.hideBuy();
-  if (relock && started && state.phase !== 'matchEnd' && !shot) input.requestLock();
+  if (relock && started && state.phase !== 'matchEnd' && !shot) {
+    input.requestLock().then((locked) => {
+      if (locked) return;
+      // Chrome enforces ~1.25s between exiting the lock and re-acquiring it; a
+      // quick close can land inside the cooldown and leave mouse look dead
+      // until the next click. Retry once after the cooldown, if the game still
+      // wants the lock then.
+      setTimeout(() => {
+        if (!hud.buyOpen && started && !paused && state.phase !== 'matchEnd') input.requestLock();
+      }, 1400);
+    });
+  }
 }
 
 function onLockChange(locked) {
@@ -572,7 +613,10 @@ function step(dt) {
   bots.step(dt, state.simTime);
   effects.step(dt);
   rounds.step(dt);
-  input.endStep();
+  // Edge-triggered keys are NOT cleared here: they are consumed once per frame
+  // in frame(), after the steps. Clearing inside the step let a frame with no
+  // sim step (fast display) re-trigger the same press — B opened then closed
+  // the buy menu in one tap.
 }
 
 function handleDiscreteKeys() {
@@ -664,7 +708,6 @@ function frame(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.1);
   lastTime = now;
   if (!frozen && !paused && started) {
-    handleDiscreteKeys();
     const look = input.takeLook();
     if (input.state.locked && player.alive) playerBody.look(look.x, look.y);
     accumulator += dt;
@@ -675,6 +718,12 @@ function frame(now) {
       steps += 1;
     }
     if (accumulator > FIXED_STEP * 5) accumulator = 0;
+    // Discrete keys run once per frame, after the steps, and the edge set is
+    // cleared right here — so a press is consumed exactly once even on a frame
+    // where no sim step ran. (Steps still see the press first: reload is
+    // guarded, so several steps in one frame can't double-trigger it.)
+    handleDiscreteKeys();
+    input.endStep();
     syncCamera();
     syncHud();
   }
@@ -753,13 +802,13 @@ function runShot(name) {
     player.primary = 'vk47';
     weapons.switchTo('vk47');
     const bram = bots.byId('bram');
-    bram.pos.set(0.5, 0, 1);
+    bram.pos.set(0.3, 0, 5);
     bram.yaw = Math.PI;
     bram.state = 'hold';
     bram.holdYaw = Math.PI;
     bram.holdUntil = state.simTime + 60;
     const onyx = bots.byId('onyx');
-    onyx.pos.set(-1.4, 0, 2.5);
+    onyx.pos.set(-1.6, 0, 5.5);
     onyx.yaw = Math.PI * 0.9;
     onyx.state = 'hold';
     onyx.holdYaw = Math.PI * 0.8;
@@ -768,8 +817,8 @@ function runShot(name) {
     bots.blind(bram, state.simTime + 60, 1);
     bots.blind(onyx, state.simTime + 60, 1);
     settle(10);
-    hud.killfeedAdd({ killer: 'Rook', killerTeam: 'sable', victim: 'Fenn', victimTeam: 'warden', headshot: false });
-    aimPoint.set(0.5, 1.2, 1);
+    hud.killfeedAdd({ killer: 'Rook', killerTeam: 'sable', victim: 'Fenn', victimTeam: 'warden', headshot: false }, true);
+    aimPoint.set(0.3, 1.2, 5);
     aimAt(aimPoint);
     playerShoot();
     settle(1);
